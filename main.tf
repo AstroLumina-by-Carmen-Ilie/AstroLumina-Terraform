@@ -28,7 +28,7 @@ variable "ssh_pub_key" {
 # ============================================================
 resource "libvirt_volume" "ubuntu_base" {
   name = "ubuntu-22.04-base"
-  pool = "default"
+  pool = "terraform-pool"
 
   target = {
     format = {
@@ -65,7 +65,7 @@ module "rke2_control_plane" {
 
   base_image_path = local.base_image_path
   network_name    = "default"
-  disk_pool       = "default"
+  disk_pool       = "terraform-pool"
 
   tags = {
     role    = "control-plane"
@@ -89,7 +89,7 @@ module "rke2_worker" {
 
   base_image_path = local.base_image_path
   network_name    = "default"
-  disk_pool       = "default"
+  disk_pool       = "terraform-pool"
 
   tags = {
     role    = "worker"
