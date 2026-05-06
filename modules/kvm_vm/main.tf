@@ -58,14 +58,8 @@ EOF
 # Cloud-Init ISO Volume (from generated disk)
 # ============================================================
 resource "libvirt_volume" "cloudinit_iso" {
-  name   = "${var.vm_name}-cloudinit.iso"
-  pool   = var.disk_pool
-
-  target = {
-    format = {
-      type = "raw"
-    }
-  }
+  name = "${var.vm_name}-cloudinit.iso"
+  pool = var.disk_pool
 
   create = {
     content = {
@@ -89,7 +83,7 @@ resource "libvirt_volume" "os_disk" {
   }
 
   backing_store = {
-    path   = var.base_image_path
+    path = var.base_image_path
     format = {
       type = "qcow2"
     }
@@ -151,7 +145,7 @@ resource "libvirt_domain" "this" {
 
     interfaces = [
       {
-        type = "network"
+        type  = "network"
         model = { type = "virtio" }
         source = {
           network = { network = var.network_name }

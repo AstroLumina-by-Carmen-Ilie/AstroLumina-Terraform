@@ -38,7 +38,7 @@ resource "libvirt_volume" "ubuntu_base" {
 
   create = {
     content = {
-      url = "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
+      url = "file:///home/daniel/libvirt-images/ubuntu-22.04-server-cloudimg-amd64.img"
     }
   }
 }
@@ -55,13 +55,13 @@ locals {
 module "rke2_control_plane" {
   source = "./modules/kvm_vm"
 
-  vm_name       = "rke2-cp-01"
-  vcpu          = 2
-  memory_mb     = 4096
-  disk_gb       = 40
-  ssh_username  = "ubuntu"
-  ssh_password  = local.ssh_password
-  ssh_pub_key   = var.ssh_pub_key
+  vm_name      = "rke2-cp-01"
+  vcpu         = 2
+  memory_mb    = 4096
+  disk_gb      = 40
+  ssh_username = "ubuntu"
+  ssh_password = local.ssh_password
+  ssh_pub_key  = var.ssh_pub_key
 
   base_image_path = local.base_image_path
   network_name    = "default"
@@ -79,13 +79,13 @@ module "rke2_control_plane" {
 module "rke2_worker" {
   source = "./modules/kvm_vm"
 
-  vm_name       = "rke2-worker-01"
-  vcpu          = 2
-  memory_mb     = 3072
-  disk_gb       = 60
-  ssh_username  = "ubuntu"
-  ssh_password  = local.ssh_password
-  ssh_pub_key   = var.ssh_pub_key
+  vm_name      = "rke2-worker-01"
+  vcpu         = 2
+  memory_mb    = 3072
+  disk_gb      = 60
+  ssh_username = "ubuntu"
+  ssh_password = local.ssh_password
+  ssh_pub_key  = var.ssh_pub_key
 
   base_image_path = local.base_image_path
   network_name    = "default"
