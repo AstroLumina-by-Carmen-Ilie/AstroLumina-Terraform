@@ -9,10 +9,6 @@ terraform {
       version = "~> 0.9"
     }
   }
-
-  provisioner "local-exec" {
-    command = "which genisoimage || echo 'genisoimage not found'"
-  }
 }
 
 provider "libvirt" {
@@ -21,160 +17,37 @@ provider "libvirt" {
 # ============================================================
 # Variables
 # ============================================================
-variable "password_hash" {
-  description = "SHA-512 hashed password"
-  type        = string
-  sensitive   = true
-}
-
 variable "ssh_pub_key" {
   description = "SSH public key for access"
   type        = string
-  default     = ""
-}
-
-# ============================================================
-# Get Network ID for default network
-# ============================================================
-data "libvirt_network" "default" {
-  name = "default"
+  default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOQIgh+H2AXLQyqOm5uVT0r0FhT9iAnF6k9d7UjrxUh5 daniel.catalin.pirvu@gmail.com"
 }
 
 # ============================================================
 # Base Image Volume (Ubuntu 22.04 LTS)
 # ============================================================
 resource "libvirt_volume" "ubuntu_base" {
-  name   = "ubuntu-22.04-base"
-  pool   = "default"
-  format = "qcow2"
-  source = "/var/lib/libvirt/images/ubuntu-22.04-server-cloudimg-amd64.img"
-}
+  name = "ubuntu-22.04-base"
+  pool = "default"
 
-# ============================================================
-# Cloud-Init ISO for Control Plane
-# ============================================================
-resource "null_resource" "cloudinit_cp" {
-  triggers = {
-    password_hash = var.password_hash
-    hostname      = "rke2-cp-01"
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      set -e
-      HOST="rke2-cp-01"
-      mkdir -p /tmp/cloud-init-cp
-      
-      cat > /tmp/cloud-init-cp/user-data << USERDATA
-#cloud-config
-autoinstall:
-  version: 1
-  locale: en_US.UTF-8
-  keyboard:
-    layout: us
-  identity:
-    hostname: rke2-cp-01
-    password: "${password_hash}"
-    name: ubuntu
-  ssh:
-    install-server: true
-    allow-pw: true
-  storage:
-    layout:
-      name: LVM
-  packages:
-    - openssh-server
-    - curl
-    - wget
-    - git
-    - vim
-    - net-tools
-    - jq
-    - ca-certificates
-  late-commands:
-    - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu
-USERDATA
-
-      cat > /tmp/cloud-init-cp/meta-data << METADATA
-instance-id: rke2-cp-01
-local-hostname: rke2-cp-01
-METADATA
-
-      genisoimage -o /tmp/cloud-init-cp.iso -r -V "cidata" /tmp/cloud-init-cp/
-      echo "/tmp/cloud-init-cp.iso"
-    EOT
-
-    interpreter = ["bash", "-c"]
-    vars = {
-      password_hash = var.password_hash
+  target = {
+    format = {
+      type = "qcow2"
     }
   }
-}
 
-# ============================================================
-# Cloud-Init ISO for Worker
-# ============================================================
-resource "null_resource" "cloudinit_worker" {
-  triggers = {
-    password_hash = var.password_hash
-    hostname      = "rke2-worker-01"
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      set -e
-      mkdir -p /tmp/cloud-init-worker
-      
-      cat > /tmp/cloud-init-worker/user-data << USERDATA
-#cloud-config
-autoinstall:
-  version: 1
-  locale: en_US.UTF-8
-  keyboard:
-    layout: us
-  identity:
-    hostname: rke2-worker-01
-    password: "${password_hash}"
-    name: ubuntu
-  ssh:
-    install-server: true
-    allow-pw: true
-  storage:
-    layout:
-      name: LVM
-  packages:
-    - openssh-server
-    - curl
-    - wget
-    - git
-    - vim
-    - net-tools
-    - jq
-    - ca-certificates
-  late-commands:
-    - echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu
-USERDATA
-
-      cat > /tmp/cloud-init-worker/meta-data << METADATA
-instance-id: rke2-worker-01
-local-hostname: rke2-worker-01
-METADATA
-
-      genisoimage -o /tmp/cloud-init-worker.iso -r -V "cidata" /tmp/cloud-init-worker/
-      echo "/tmp/cloud-init-worker.iso"
-    EOT
-
-    interpreter = ["bash", "-c"]
-    vars = {
-      password_hash = var.password_hash
+  create = {
+    content = {
+      url = "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
     }
   }
 }
 
 locals {
-  cloudinit_cp_path     = trimspace(null_resource.cloudinit_cp.stdout)
-  cloudinit_worker_path = trimspace(null_resource.cloudinit_worker.stdout)
+  base_image_path = libvirt_volume.ubuntu_base.path
+  ssh_password    = "$6$v1t7CQ/6dLluvzuU$p/fj5WYkimzoFTkLl141mHChFnKXOTvy2QbYXry.0cPwQ0jtYs4YnnwD6lV50qxio7dmgFa1xm/k74uPksJIf."
 }
+
 
 # ============================================================
 # Control Plane Node (RKE2) - 4GB RAM, 2 vCPU
@@ -182,17 +55,17 @@ locals {
 module "rke2_control_plane" {
   source = "./modules/kvm_vm"
 
-  vm_name      = "rke2-cp-01"
-  vcpu         = 2
-  memory_mb    = 4096
-  disk_gb      = 40
-  ssh_username = "ubuntu"
+  vm_name       = "rke2-cp-01"
+  vcpu          = 2
+  memory_mb     = 4096
+  disk_gb       = 40
+  ssh_username  = "ubuntu"
+  ssh_password  = local.ssh_password
+  ssh_pub_key   = var.ssh_pub_key
 
-  base_image_id      = libvirt_volume.ubuntu_base.id
-  base_image_pool    = "default"
-  cloudinit_iso_path = local.cloudinit_cp_path
-  network_id         = data.libvirt_network.default.id
-  disk_pool          = "default"
+  base_image_path = local.base_image_path
+  network_name    = "default"
+  disk_pool       = "default"
 
   tags = {
     role    = "control-plane"
@@ -206,17 +79,17 @@ module "rke2_control_plane" {
 module "rke2_worker" {
   source = "./modules/kvm_vm"
 
-  vm_name      = "rke2-worker-01"
-  vcpu         = 2
-  memory_mb    = 3072
-  disk_gb      = 60
-  ssh_username = "ubuntu"
+  vm_name       = "rke2-worker-01"
+  vcpu          = 2
+  memory_mb     = 3072
+  disk_gb       = 60
+  ssh_username  = "ubuntu"
+  ssh_password  = local.ssh_password
+  ssh_pub_key   = var.ssh_pub_key
 
-  base_image_id      = libvirt_volume.ubuntu_base.id
-  base_image_pool    = "default"
-  cloudinit_iso_path = local.cloudinit_worker_path
-  network_id         = data.libvirt_network.default.id
-  disk_pool          = "default"
+  base_image_path = local.base_image_path
+  network_name    = "default"
+  disk_pool       = "default"
 
   tags = {
     role    = "worker"
