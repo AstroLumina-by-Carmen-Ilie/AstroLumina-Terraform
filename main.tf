@@ -23,52 +23,28 @@ variable "ssh_pub_key" {
   default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOQIgh+H2AXLQyqOm5uVT0r0FhT9iAnF6k9d7UjrxUh5 daniel.catalin.pirvu@gmail.com"
 }
 
-# ============================================================
-# Base Image Volume (Ubuntu 22.04 LTS)
-# ============================================================
-resource "libvirt_volume" "ubuntu_base" {
-  name = "ubuntu-22.04-base"
-  pool = "terraform-pool"
-
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-
-  create = {
-    content = {
-      url = "file:///home/daniel/libvirt-images/ubuntu-22.04-server-cloudimg-amd64.img"
-    }
-  }
-}
-
 locals {
-  base_image_path = libvirt_volume.ubuntu_base.path
-  ssh_password    = "$6$v1t7CQ/6dLluvzuU$p/fj5WYkimzoFTkLl141mHChFnKXOTvy2QbYXry.0cPwQ0jtYs4YnnwD6lV50qxio7dmgFa1xm/k74uPksJIf."
+  cp_image_path   = "/var/lib/libvirt/images/rke2-cp-01.qcow2"
+  worker_image_path = "/var/lib/libvirt/images/rke2-worker-01.qcow2"
 }
 
-
-# ============================================================
-# Control Plane Node (RKE2) - 4GB RAM, 2 vCPU
 # ============================================================
 module "rke2_control_plane" {
   source = "./modules/kvm_vm"
 
   vm_name      = "rke2-cp-01"
   vcpu         = 2
-  memory_mb    = 4096
+  memory_mb   = 4096
   disk_gb      = 40
   ssh_username = "ubuntu"
-  ssh_password = local.ssh_password
   ssh_pub_key  = var.ssh_pub_key
 
-  base_image_path = local.base_image_path
+  base_image_path = local.cp_image_path
   network_name    = "default"
-  disk_pool       = "terraform-pool"
+  disk_pool       = "default"
+  running        = false
 
   tags = {
-    role    = "control-plane"
     cluster = "rke2"
   }
 }
@@ -81,15 +57,15 @@ module "rke2_worker" {
 
   vm_name      = "rke2-worker-01"
   vcpu         = 2
-  memory_mb    = 3072
+  memory_mb   = 3072
   disk_gb      = 60
   ssh_username = "ubuntu"
-  ssh_password = local.ssh_password
   ssh_pub_key  = var.ssh_pub_key
 
-  base_image_path = local.base_image_path
+  base_image_path = local.worker_image_path
   network_name    = "default"
-  disk_pool       = "terraform-pool"
+  disk_pool       = "default"
+  running        = false
 
   tags = {
     role    = "worker"

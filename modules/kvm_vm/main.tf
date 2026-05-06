@@ -1,5 +1,5 @@
-# KVM VM Module - With Cloud-Init Autoinstall
-# For dmacvicar/libvirt v0.9.x
+# KVM VM Module
+# dmacvicar/libvirt v0.9.x
 
 terraform {
   required_providers {
@@ -10,7 +10,7 @@ terraform {
 }
 
 # ============================================================
-# Cloud-Init Disk (generates ISO)
+# Cloud-Init Disk (generates config ISO)
 # ============================================================
 resource "libvirt_cloudinit_disk" "this" {
   name = "${var.vm_name}-cloudinit"
@@ -23,15 +23,10 @@ users:
     groups: users, admin, sudo
     home: /home/${var.ssh_username}
     shell: /bin/bash
-    lock_passwd: false
-    plain_text_passwd: ${var.ssh_password}
     ssh_authorized_keys:
       - ${var.ssh_pub_key}
 
-chpasswd:
-  expire: false
-
-ssh_pwauth: true
+ssh_pwauth: false
 
 packages:
   - openssh-server
@@ -55,7 +50,7 @@ EOF
 }
 
 # ============================================================
-# Cloud-Init ISO Volume (from generated disk)
+# Cloud-Init ISO Volume
 # ============================================================
 resource "libvirt_volume" "cloudinit_iso" {
   name = "${var.vm_name}-cloudinit.iso"
@@ -69,7 +64,7 @@ resource "libvirt_volume" "cloudinit_iso" {
 }
 
 # ============================================================
-# OS Disk
+# OS Disk (copy from base image)
 # ============================================================
 resource "libvirt_volume" "os_disk" {
   name     = var.vm_name
@@ -82,11 +77,15 @@ resource "libvirt_volume" "os_disk" {
     }
   }
 
-  backing_store = {
+  backing_store = var.base_image_path != "" ? {
     path = var.base_image_path
     format = {
       type = "qcow2"
     }
+  } : null
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -99,7 +98,7 @@ resource "libvirt_domain" "this" {
   memory_unit = "MiB"
   vcpu        = var.vcpu
   type        = "kvm"
-  running     = true
+  running     = var.running
 
   os = {
     type         = "hvm"
@@ -171,9 +170,10 @@ resource "libvirt_domain" "this" {
 }
 
 # ============================================================
-# Data Source for IP Addresses
+# Data Source for IP Addresses (only when running)
 # ============================================================
 data "libvirt_domain_interface_addresses" "this" {
+  count = var.running ? 1 : 0
   domain = libvirt_domain.this.id
   source = "lease"
 
@@ -190,7 +190,7 @@ output "vm_name" {
 
 output "ip_address" {
   description = "Adresa IP a VM-ului"
-  value       = try(data.libvirt_domain_interface_addresses.this.interfaces[0].addrs[0].addr, "N/A")
+  value       = var.running ? try(data.libvirt_domain_interface_addresses.this[0].interfaces[0].addrs[0].addr, "N/A") : "VM oprit"
 }
 
 output "vcpu" {

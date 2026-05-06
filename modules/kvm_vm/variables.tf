@@ -27,15 +27,9 @@ variable "ssh_username" {
   default     = "ubuntu"
 }
 
-variable "ssh_password" {
-  description = "Parola pentru utilizatorul SSH (hash bcrypt sau text clar pentru cloud-init)"
-  type        = string
-}
-
 variable "ssh_pub_key" {
-  description = "Cheia SSH publică pentru autentificare (opțional)"
+  description = "Cheia SSH publică pentru autentificare"
   type        = string
-  default     = ""
 }
 
 variable "disk_pool" {
@@ -47,11 +41,11 @@ variable "disk_pool" {
 variable "tags" {
   description = "Tag-uri pentru VM"
   type        = map(string)
-  default     = {}
+  default    = {}
 }
 
 variable "base_image_path" {
-  description = "Calea către imaginea de bază QCOW2 (ex: /var/lib/libvirt/images/ubuntu-22.04-server-cloudimg-amd64.img)"
+  description = "Calea către imaginea de bază QCOW2 (ex: /home/daniel/libvirt-images/ubuntu-22.04-server-cloudimg-amd64.img)"
   type        = string
 }
 
@@ -65,4 +59,10 @@ variable "network_name" {
   description = "Numele rețelei libvirt"
   type        = string
   default     = "default"
+}
+
+variable "running" {
+  description = "Dacă VM-ul pornește automat după creare"
+  type        = bool
+  default     = false
 }
