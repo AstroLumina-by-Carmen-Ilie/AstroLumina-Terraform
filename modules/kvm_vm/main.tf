@@ -25,8 +25,9 @@ users:
     shell: /bin/bash
     ssh_authorized_keys:
       - ${var.ssh_pub_key}
+    passwd: "\$6\$3aPLIciNJvfS8SIq\$D0apRugiPfTW05ocaS6/SvC.chxYNz.w6ppX9fIS5fRcurnajsQnQE6rZZPRaVKI6zcE8f9UGuWo436KhYoyY."
 
-ssh_pwauth: false
+ssh_pwauth: true
 
 packages:
   - openssh-server

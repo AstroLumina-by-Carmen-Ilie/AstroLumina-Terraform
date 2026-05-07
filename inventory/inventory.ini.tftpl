@@ -1,12 +1,10 @@
 # ============================================================
 # Ansible Inventory Template for RKE2 Cluster
 # ============================================================
-# Template variables: cp_ip, worker_ip
-# ============================================================
 
 [all]
-rke2-cp-01 ansible_host={{ cp_ip }} ansible_connection=ssh
-rke2-worker-01 ansible_host={{ worker_ip }} ansible_connection=ssh
+rke2-cp-01 ansible_host={{ cp_ip }}
+rke2-worker-01 ansible_host={{ worker_ip }}
 
 [control_plane]
 rke2-cp-01
@@ -19,13 +17,9 @@ control_plane
 workers
 
 [all:vars]
+ansible_connection=ssh
 ansible_user=ubuntu
 ansible_become=true
 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 ansible_ssh_private_key_file=~/.ssh/id_rsa
-
-[control_plane:vars]
-rke2_role=server
-
-[workers:vars]
-rke2_role=agent
+ansible_password=<parola>

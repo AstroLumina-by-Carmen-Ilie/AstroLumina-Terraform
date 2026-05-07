@@ -24,8 +24,7 @@ variable "ssh_pub_key" {
 }
 
 locals {
-  cp_image_path   = "/var/lib/libvirt/images/rke2-cp-01.qcow2"
-  worker_image_path = "/var/lib/libvirt/images/rke2-worker-01.qcow2"
+  ubuntu_image_path   = "/var/lib/libvirt/images/ubuntu.qcow2"
 }
 
 # ============================================================
@@ -39,19 +38,17 @@ module "rke2_control_plane" {
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
 
-  base_image_path = local.cp_image_path
+  base_image_path = local.ubuntu_image_path
   network_name    = "default"
   disk_pool       = "default"
-  running        = false
+  running         = true
 
   tags = {
+    role    = "control-plane"
     cluster = "rke2"
   }
 }
 
-# ============================================================
-# Worker Node - 3GB RAM, 2 vCPU
-# ============================================================
 module "rke2_worker" {
   source = "./modules/kvm_vm"
 
@@ -62,10 +59,10 @@ module "rke2_worker" {
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
 
-  base_image_path = local.worker_image_path
+  base_image_path = local.ubuntu_image_path
   network_name    = "default"
   disk_pool       = "default"
-  running        = false
+  running         = true
 
   tags = {
     role    = "worker"
