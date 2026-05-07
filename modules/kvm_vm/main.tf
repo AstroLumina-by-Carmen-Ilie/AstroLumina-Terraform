@@ -15,7 +15,7 @@ terraform {
 resource "libvirt_cloudinit_disk" "this" {
   name = "${var.vm_name}-cloudinit"
 
-  user_data = var.cloudinit_user_data != "" ? var.cloudinit_user_data : <<-EOF
+  user_data = <<-EOF
 #cloud-config
 users:
   - name: ${var.ssh_username}
@@ -25,9 +25,11 @@ users:
     shell: /bin/bash
     ssh_authorized_keys:
       - ${var.ssh_pub_key}
-    passwd: "\$6\$3aPLIciNJvfS8SIq\$D0apRugiPfTW05ocaS6/SvC.chxYNz.w6ppX9fIS5fRcurnajsQnQE6rZZPRaVKI6zcE8f9UGuWo436KhYoyY."
+%{if var.ssh_password != ""}
+    passwd: "${var.ssh_password}"
+%{endif}
 
-ssh_pwauth: true
+ssh_pwauth: ${var.ssh_password != "" ? "true" : "false"}
 
 packages:
   - openssh-server
@@ -40,8 +42,10 @@ packages:
   - ca-certificates
 
 runcmd:
-  - systemctl enable ssh
-  - systemctl start ssh
+   - echo '${var.ssh_username}:${var.ssh_password}' | chpasswd
+   - systemctl enable ssh
+   - systemctl start ssh
+   - apt update && apt upgrade -y
 EOF
 
   meta_data = yamlencode({
@@ -174,8 +178,8 @@ resource "libvirt_domain" "this" {
 # Data Source for IP Addresses (only when running)
 # ============================================================
 data "libvirt_domain_interface_addresses" "this" {
-  count = var.running ? 1 : 0
-  domain = libvirt_domain.this.id
+  count  = var.running ? 1 : 0
+  domain = var.vm_name
   source = "lease"
 
   depends_on = [libvirt_domain.this]

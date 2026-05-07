@@ -23,8 +23,14 @@ variable "ssh_pub_key" {
   default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOQIgh+H2AXLQyqOm5uVT0r0FhT9iAnF6k9d7UjrxUh5 daniel.catalin.pirvu@gmail.com"
 }
 
+variable "ssh_password" {
+  description = "Password for user ubuntu (plain text - will be hashed by cloud-init)"
+  type        = string
+  default     = "ubuntu"
+}
+
 locals {
-  ubuntu_image_path   = "/var/lib/libvirt/images/ubuntu.qcow2"
+  ubuntu_image_path = "/var/lib/libvirt/images/ubuntu.qcow2"
 }
 
 # ============================================================
@@ -33,10 +39,11 @@ module "rke2_control_plane" {
 
   vm_name      = "rke2-cp-01"
   vcpu         = 2
-  memory_mb   = 4096
+  memory_mb    = 4096
   disk_gb      = 40
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
+  ssh_password = var.ssh_password
 
   base_image_path = local.ubuntu_image_path
   network_name    = "default"
@@ -54,10 +61,11 @@ module "rke2_worker" {
 
   vm_name      = "rke2-worker-01"
   vcpu         = 2
-  memory_mb   = 3072
+  memory_mb    = 3072
   disk_gb      = 60
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
+  ssh_password = var.ssh_password
 
   base_image_path = local.ubuntu_image_path
   network_name    = "default"
@@ -101,8 +109,8 @@ output "vm_details" {
 
 output "ssh_connection_info" {
   description = "Cum să te conectezi"
-  value       = <<-EOF
-ssh ubuntu@<CP_IP>
-ssh ubuntu@<WORKER_IP>
-EOF
+  value = [
+    "ssh ubuntu@${module.rke2_control_plane.ip_address}",
+    "ssh ubuntu@${module.rke2_worker.ip_address}"
+  ]
 }
