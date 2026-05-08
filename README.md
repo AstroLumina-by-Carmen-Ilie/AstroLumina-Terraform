@@ -9,6 +9,8 @@ AstroLumina-Terraform/
 ├── main.tf                    # Configurația principală Terraform
 ├── terraform.tfvars         # Variabile
 ├── tf.sh                   # Helper script (init, apply, destroy, start, stop, ips)
+├── configs/
+│   └── network-default.xml   # Configurație rețea libvirt (KVM/QEMU only)
 ├── modules/
 │   └── kvm_vm/           # Modul reutilizabil pentru VM-uri
 │       ├── main.tf
@@ -25,7 +27,7 @@ AstroLumina-Terraform/
 | rke2-cp-01 | 2 | 4 GB | 40 GB | Control Plane (server RKE2) |
 | rke2-worker-01 | 2 | 3 GB | 60 GB | Worker (agent RKE2) |
 
-## Cerințe Sistem
+## Cerințe Sistem (KVM/QEMU)
 
 ### Pachete necesare
 
@@ -46,21 +48,20 @@ kvm-ok
 virt-host-validate
 ```
 
-### AppArmor (ZorinOS, Ubuntu, etc.)
+### AppArmor (KVM/QEMU - ZorinOS, Ubuntu, etc.)
 
-**Important:** Dacă sistemul are AppArmor activ, libvirtd nu va porni VM-urile. Trebuie oprit AppArmor și restartat libvirtd:
+**Notă KVM/QEMU:** Dacă sistemul are AppArmor activ, libvirtd nu va porni VM-urile:
 
 ```bash
 sudo systemctl stop apparmor
-sudo systemctl disable apparmor
 sudo systemctl restart libvirtd
 ```
 
-Fără asta, VM-urile vor fi create dar vor rămâne în stare "shut off".
+### Rețeaua virtuală (KVM/QEMU only)
 
-### Rețeaua virtuală
+**Specific KVM/QEMU:** Rețeaua virtuală și IP-urile fixe sunt configurate în libvirt.
 
-Trebuie configurată rețeaua `default` în libvirt.tf.sh init face asta automat:
+Fișier de configurare: `configs/network-default.xml`
 
 ```bash
 ./tf.sh init
@@ -69,21 +70,21 @@ Trebuie configurată rețeaua `default` în libvirt.tf.sh init face asta automat
 Dacă manual:
 
 ```bash
-sudo virsh net-define <<EOF
-<network>
-  <name>default</name>
-  <forward mode='nat'/>
-  <bridge name='virbr0' stp='on' delay='0'/>
-  <ip address='192.168.122.1' netmask='255.255.255.0'>
-    <dhcp>
-      <range start='192.168.122.2' end='192.168.122.254'/>
-    </dhcp>
-  </ip>
-</network>
-EOF
+sudo virsh net-define configs/network-default.xml
 sudo virsh net-start default
 sudo virsh net-autostart default
 ```
+
+### Storage Pool (KVM/QEMU only)
+
+**Specific KVM/QEMU:** KVM vine cu un storage pool `default` preconfigurat:
+
+```
+/var/lib/libvirt/images/
+```
+
+Aici se pun imaginile de bază (ubuntu.qcow2) și aici se creează disk-urile VM-urilor. Nu necesită configurare suplimentară.
+
 
 ## Configurare
 
@@ -119,14 +120,33 @@ Rulează de două ori (a doua oară pentru a obține IP-urile DHCP).
 
 | Comandă | Descriere |
 |---------|----------|
-| `./tf.sh init` | Descarcă imaginile de bază și inițializează Terraform |
-| `./tf.sh apply` | Creează VM-urile |
+| `./tf.sh init` | Descarcă imaginile de bază, configurează rețeaua și inițializează Terraform |
+| `./tf.sh apply` | Creează VM-urile cu IP-uri fixe (192.168.122.10, 192.168.122.11) |
 | `./tf.sh destroy` | Distruge toate VM-urile |
 | `./tf.sh start` | Pornește VM-urile |
 | `./tf.sh stop` | Oprește graceful VM-urile |
 | `./tf.sh force-stop` | Forțează oprirea VM-urilor |
 | `./tf.sh ips` | Afișează IP-urile DHCP și starea VM-urilor |
 | `./tf.sh status` | Afișează VM-urile care rulează |
+
+## IP-uri Fixe (KVM/QEMU only)
+
+**Specific KVM/QEMU:** VM-urile primesc IP-uri fixe prin rezervări DHCP definite în `configs/network-default.xml`:
+
+| VM | MAC Address | IP Fix |
+|-----|------------|-------|
+| rke2-cp-01 | 52:54:00:a1:b2:c3 | 192.168.122.10 |
+| rke2-worker-01 | 52:54:00:d1:e2:f3 | 192.168.122.11 |
+
+Configurate în `configs/network-default.xml`:
+
+```xml
+<dhcp>
+  <range start='192.168.122.12' end='192.168.122.254'/>
+  <host mac='52:54:00:a1:b2:c3' ip='192.168.122.10'/>
+  <host mac='52:54:00:d1:e2:f3' ip='192.168.122.11'/>
+</dhcp>
+```
 
 ## Acces VM-uri
 
@@ -147,14 +167,6 @@ ssh ubuntu@<IP_VM>
 # Parola: ubuntu
 ```
 
-## Ansible
-
-După crearea VM-urilor, generare inventory:
-
-```bash
-terraform output ansible_inventory > inventory/hosts.ini
-```
-
 ## Troubleshooting
 
 ### VM nu pornește
@@ -168,7 +180,6 @@ virsh list --all
 ```bash
 sudo systemctl status apparmor
 sudo systemctl stop apparmor
-sudo systemctl disable apparmor
 sudo systemctl restart libvirtd
 ```
 

@@ -66,3 +66,9 @@ variable "running" {
   type        = bool
   default     = false
 }
+
+variable "mac_address" {
+  description = "MAC address pentru IP fix (trebuie să se potrivească cu rezervarea DHCP)"
+  type        = string
+  default     = ""
+}

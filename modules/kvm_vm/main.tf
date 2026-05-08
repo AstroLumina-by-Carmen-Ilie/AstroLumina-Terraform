@@ -154,6 +154,7 @@ resource "libvirt_domain" "this" {
         source = {
           network = { network = var.network_name }
         }
+        mac = var.mac_address != "" ? { address = var.mac_address } : null
       }
     ]
 

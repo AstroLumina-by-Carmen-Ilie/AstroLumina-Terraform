@@ -16,18 +16,22 @@ VM_WORKER="rke2-worker-01"
 # ============================================================
 check_packages() {
     local missing=()
-    for pkg in qemu-system-x86 libvirt-daemon-system bridge-utils terraform; do
+    for pkg in qemu-system-x86 libvirt-daemon-system bridge-utils; do
         if ! dpkg -l | grep -q "^ii.*$pkg"; then
             missing+=("$pkg")
         fi
     done
     
     if [[ ${#missing[@]} -gt 0 ]]; then
-        echo "Missing required packages: ${missing[*]}"
+        echo "Missing packages: ${missing[*]}"
         echo "Install with: sudo apt-get install -y ${missing[*]}"
-        return 1
     fi
-    return 0
+    
+    if ! command -v terraform &> /dev/null; then
+        echo "Terraform not found"
+    else
+        terraform -v | head -1
+    fi
 }
 
 # ============================================================
@@ -65,23 +69,11 @@ ensure_network() {
     echo "Ensuring libvirt network is active..."
     if ! sudo virsh net-info default >/dev/null 2>&1; then
         echo "Creating default network..."
-        sudo virsh net-define /dev/stdin <<EOF
-<network>
-  <name>default</name>
-  <forward mode='nat'/>
-  <bridge name='virbr0' stp='on' delay='0'/>
-  <mac address='52:54:00:21:cd:18'/>
-  <ip address='192.168.122.1' netmask='255.255.255.0'>
-    <dhcp>
-      <range start='192.168.122.2' end='192.168.122.254'/>
-    </dhcp>
-  </ip>
-</network>
-EOF
+        sudo virsh net-define "$SCRIPT_DIR/configs/network-default.xml"
     fi
     sudo virsh net-start default 2>/dev/null || true
     sudo virsh net-autostart default
-    echo "Network ready"
+    echo "Network ready with static DHCP reservations"
 }
 
 # ============================================================
