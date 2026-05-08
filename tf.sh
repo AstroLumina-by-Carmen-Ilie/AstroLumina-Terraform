@@ -63,17 +63,16 @@ init_images() {
 }
 
 # ============================================================
-# Ensure libvirt network is active
+# Recreate network (for new MACs/IPs)
 # ============================================================
-ensure_network() {
-    echo "Ensuring libvirt network is active..."
-    if ! sudo virsh net-info default >/dev/null 2>&1; then
-        echo "Creating default network..."
-        sudo virsh net-define "$SCRIPT_DIR/configs/network-default.xml"
-    fi
-    sudo virsh net-start default 2>/dev/null || true
+recreate_network() {
+    echo "Recreating libvirt network..."
+    sudo virsh net-destroy default 2>/dev/null || true
+    sudo virsh net-undefine default 2>/dev/null || true
+    sudo virsh net-define "$SCRIPT_DIR/configs/network-default.xml"
+    sudo virsh net-start default
     sudo virsh net-autostart default
-    echo "Network ready with static DHCP reservations"
+    echo "Network recreated"
 }
 
 # ============================================================
@@ -131,9 +130,19 @@ get_ips() {
 # ============================================================
 # Main case statement
 # ============================================================
+ensure_network() {
+    echo "Ensuring libvirt network..."
+    if sudo virsh net-info default 2>/dev/null | grep -q "Active:.*yes"; then
+        echo "Network already active"
+    else
+        sudo virsh net-start default
+        sudo virsh net-autostart default
+    fi
+}
+
 case $1 in
     "init")
-        check_packages || exit 1
+        check_packages
         ensure_network
         init_images
 		terraform init
@@ -158,6 +167,9 @@ case $1 in
     "ips")
         get_ips
         ;;
+    "recreate-network")
+        recreate_network
+        ;;
     "status")
         sudo virsh list --all
         ;;
@@ -166,22 +178,23 @@ case $1 in
         echo ""
         echo "Usage: $0 [command]"
         echo ""
-        echo "Commands:"
-        echo "  init         - Download base images and initialize Terraform"
-        echo "  apply        - Create VMs with terraform apply (runs twice for IPs)"
-        echo "  destroy     - Destroy all VMs"
-        echo "  start       - Start all VMs"
-        echo "  stop        - Graceful shutdown all VMs"
-        echo "  force-stop  - Force stop (destroy) all VMs"
-        echo "  ips         - Show DHCP leases and VM status"
-        echo "  status      - Show running VMs"
+echo "Commands:"
+        echo "  init               - Download base images and initialize Terraform"
+        echo "  apply              - Create VMs with terraform apply (runs twice for IPs)"
+        echo "  destroy           - Destroy all VMs"
+        echo "  start             - Start all VMs"
+        echo "  stop              - Graceful shutdown all VMs"
+        echo "  force-stop        - Force stop (destroy) all VMs"
+        echo "  ips               - Show DHCP leases and VM status"
+        echo "  status            - Show running VMs"
+        echo "  recreate-network  - Recreate network (for new MACs)"
         echo ""
+
         echo "Examples:"
-        echo "  $0 init      # First time setup"
-        echo "  $0 apply     # Create VMs"
-        echo "  $0 ips       # Get VM IPs"
-        echo "  $0 start     # Start VMs"
-        echo "  $0 stop      # Shutdown VMs"
+        echo "  $0 init               # First time setup"
+        echo "  $0 apply              # Create VMs"
+        echo "  $0 ips               # Get VM IPs"
+        echo "  $0 recreate-network # Recreate network with new DHCP reservations"
         return 1
         ;;
 esac
