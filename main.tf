@@ -30,7 +30,7 @@ variable "ssh_password" {
 }
 
 locals {
-  ubuntu_image_path = "/var/lib/libvirt/images/ubuntu.qcow2"
+  ubuntu_image_path = "/var/lib/libvirt/images/ubuntu-24.04.qcow2"
 }
 
 # ============================================================

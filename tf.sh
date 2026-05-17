@@ -38,9 +38,10 @@ check_packages() {
 # Download and convert base images (if not present)
 # ============================================================
 init_images() {
+    ubuntu_version="24.04"
     libvirt_img_path="/var/lib/libvirt/images"
-    base_image="${libvirt_img_path}/ubuntu-22.04-server-cloudimg-amd64.img"
-    base_image_url="https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
+    base_image="${libvirt_img_path}/ubuntu-${ubuntu_version}-server-cloudimg-amd64.img"
+    base_image_url="https://cloud-images.ubuntu.com/releases/${ubuntu_version}/release/ubuntu-${ubuntu_version}-server-cloudimg-amd64.img"
     
     if [[ ! -f "$base_image" ]]; then
         echo "Base image not found at $base_image"
@@ -51,7 +52,7 @@ init_images() {
         echo "...Download complete"
     fi
     
-    qcow2_image="${libvirt_img_path}/ubuntu.qcow2"
+    qcow2_image="${libvirt_img_path}/ubuntu-${ubuntu_version}.qcow2"
     if [[ ! -f "$qcow2_image" ]]; then
         echo "Ubuntu QCOW2 image not found at $qcow2_image"
         echo "Converting IMG to QCOW2..."
