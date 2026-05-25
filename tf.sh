@@ -10,6 +10,7 @@ cd "$SCRIPT_DIR"
 # VM names
 VM_CP="rke2-cp-01"
 VM_WORKER="rke2-worker-01"
+VM_WORKER2="rke2-worker-02"
 
 # ============================================================
 # Check for required packages
@@ -81,8 +82,9 @@ recreate_network() {
 # ============================================================
 start_vms() {
     echo "Starting VMs..."
-    sudo virsh start "$VM_CP"
-    sudo virsh start "$VM_WORKER"
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+        sudo virsh start "$vm"
+    done
     echo "VMs started"
 }
 
@@ -91,11 +93,12 @@ start_vms() {
 # ============================================================
 stop_vms() {
     echo "Stopping VMs (graceful shutdown)..."
-    sudo virsh shutdown "$VM_CP"
-    sudo virsh shutdown "$VM_WORKER"
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+        sudo virsh shutdown "$vm"
+    done
     
     # Wait for shutdown
-    for vm in "$VM_CP" "$VM_WORKER"; do
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
         echo "Waiting for $vm to shutdown..."
         for i in {1..30}; do
             if ! sudo virsh list | grep -q "$vm"; then
@@ -112,8 +115,9 @@ stop_vms() {
 # ============================================================
 force_stop_vms() {
     echo "Force stopping VMs..."
-    sudo virsh destroy "$VM_CP"
-    sudo virsh destroy "$VM_WORKER"
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+        sudo virsh destroy "$vm"
+    done
     echo "VMs destroyed"
 }
 
