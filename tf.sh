@@ -154,8 +154,6 @@ case $1 in
         ;;
     "apply")
         terraform apply -auto-approve
-        sleep 15
-        terraform apply -auto-approve
         ;;
     "destroy")
         terraform destroy -auto-approve
