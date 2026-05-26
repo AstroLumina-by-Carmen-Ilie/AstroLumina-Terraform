@@ -100,7 +100,7 @@ stop_vms() {
     # Wait for shutdown
     for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
         echo "Waiting for $vm to shutdown..."
-        for i in {1..30}; do
+        for i in {1..60}; do
             if ! sudo virsh list | grep -q "$vm"; then
                 echo "$vm stopped"
                 break
