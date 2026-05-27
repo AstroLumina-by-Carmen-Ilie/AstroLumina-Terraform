@@ -10,6 +10,7 @@ cd "$SCRIPT_DIR"
 # VM names
 VM_CP="rke2-cp-01"
 VM_WORKER="rke2-worker-01"
+VM_WORKER2="rke2-worker-02"
 
 # ============================================================
 # Check for required packages
@@ -38,9 +39,10 @@ check_packages() {
 # Download and convert base images (if not present)
 # ============================================================
 init_images() {
+    ubuntu_version="24.04"
     libvirt_img_path="/var/lib/libvirt/images"
-    base_image="${libvirt_img_path}/ubuntu-22.04-server-cloudimg-amd64.img"
-    base_image_url="https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
+    base_image="${libvirt_img_path}/ubuntu-${ubuntu_version}-server-cloudimg-amd64.img"
+    base_image_url="https://cloud-images.ubuntu.com/releases/${ubuntu_version}/release/ubuntu-${ubuntu_version}-server-cloudimg-amd64.img"
     
     if [[ ! -f "$base_image" ]]; then
         echo "Base image not found at $base_image"
@@ -51,7 +53,7 @@ init_images() {
         echo "...Download complete"
     fi
     
-    qcow2_image="${libvirt_img_path}/ubuntu.qcow2"
+    qcow2_image="${libvirt_img_path}/ubuntu-${ubuntu_version}.qcow2"
     if [[ ! -f "$qcow2_image" ]]; then
         echo "Ubuntu QCOW2 image not found at $qcow2_image"
         echo "Converting IMG to QCOW2..."
@@ -80,8 +82,9 @@ recreate_network() {
 # ============================================================
 start_vms() {
     echo "Starting VMs..."
-    sudo virsh start "$VM_CP"
-    sudo virsh start "$VM_WORKER"
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+        sudo virsh start "$vm"
+    done
     echo "VMs started"
 }
 
@@ -90,13 +93,14 @@ start_vms() {
 # ============================================================
 stop_vms() {
     echo "Stopping VMs (graceful shutdown)..."
-    sudo virsh shutdown "$VM_CP"
-    sudo virsh shutdown "$VM_WORKER"
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+        sudo virsh shutdown "$vm"
+    done
     
     # Wait for shutdown
-    for vm in "$VM_CP" "$VM_WORKER"; do
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
         echo "Waiting for $vm to shutdown..."
-        for i in {1..30}; do
+        for i in {1..60}; do
             if ! sudo virsh list | grep -q "$vm"; then
                 echo "$vm stopped"
                 break
@@ -111,8 +115,9 @@ stop_vms() {
 # ============================================================
 force_stop_vms() {
     echo "Force stopping VMs..."
-    sudo virsh destroy "$VM_CP"
-    sudo virsh destroy "$VM_WORKER"
+    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+        sudo virsh destroy "$vm"
+    done
     echo "VMs destroyed"
 }
 
@@ -148,8 +153,6 @@ case $1 in
 		terraform init
         ;;
     "apply")
-        terraform apply -auto-approve
-        sleep 15
         terraform apply -auto-approve
         ;;
     "destroy")

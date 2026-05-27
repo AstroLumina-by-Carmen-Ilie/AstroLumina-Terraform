@@ -105,6 +105,10 @@ resource "libvirt_domain" "this" {
   type        = "kvm"
   running     = var.running
 
+  cpu = {
+    mode = "host-passthrough"
+  }
+
   os = {
     type         = "hvm"
     type_arch    = "x86_64"

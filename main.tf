@@ -30,7 +30,7 @@ variable "ssh_password" {
 }
 
 locals {
-  ubuntu_image_path = "/var/lib/libvirt/images/ubuntu.qcow2"
+  ubuntu_image_path = "/var/lib/libvirt/images/ubuntu-24.04.qcow2"
 }
 
 # ============================================================
@@ -57,17 +57,40 @@ module "rke2_control_plane" {
   }
 }
 
-module "rke2_worker" {
+module "rke2_worker_01" {
   source = "./modules/kvm_vm"
 
   vm_name       = "rke2-worker-01"
   vcpu          = 2
-  memory_mb     = 4096
+  memory_mb     = 3072
   disk_gb       = 40
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
   ssh_password = var.ssh_password
   mac_address  = "52:54:00:d1:e2:f3"
+
+  base_image_path = local.ubuntu_image_path
+  network_name    = "default"
+  disk_pool       = "default"
+  running         = true
+
+  tags = {
+    role    = "worker"
+    cluster = "rke2"
+  }
+}
+
+module "rke2_worker_02" {
+  source = "./modules/kvm_vm"
+
+  vm_name       = "rke2-worker-02"
+  vcpu          = 2
+  memory_mb     = 3072
+  disk_gb       = 40
+  ssh_username = "ubuntu"
+  ssh_pub_key  = var.ssh_pub_key
+  ssh_password = var.ssh_password
+  mac_address  = "52:54:00:aa:bb:cc"
 
   base_image_path = local.ubuntu_image_path
   network_name    = "default"
@@ -87,32 +110,43 @@ output "vm_ips" {
   description = "IP-urile VM-urilor"
   value = {
     control_plane = module.rke2_control_plane.ip_address
-    worker        = module.rke2_worker.ip_address
+    worker_1      = module.rke2_worker_01.ip_address
+    worker_2      = module.rke2_worker_02.ip_address
   }
 }
 
 output "vm_details" {
   description = "Informații VM-uri"
-  value = {
-    control_plane = {
+  value = [
+    {
       name      = module.rke2_control_plane.vm_name
       vcpu      = module.rke2_control_plane.vcpu
       memory_mb = module.rke2_control_plane.memory_mb
       disk_gb   = module.rke2_control_plane.disk_gb
+      role      = "control-plane"
+    },
+    {
+      name      = module.rke2_worker_01.vm_name
+      vcpu      = module.rke2_worker_01.vcpu
+      memory_mb = module.rke2_worker_01.memory_mb
+      disk_gb   = module.rke2_worker_01.disk_gb
+      role      = "worker"
+    },
+    {
+      name      = module.rke2_worker_02.vm_name
+      vcpu      = module.rke2_worker_02.vcpu
+      memory_mb = module.rke2_worker_02.memory_mb
+      disk_gb   = module.rke2_worker_02.disk_gb
+      role      = "worker"
     }
-    worker = {
-      name      = module.rke2_worker.vm_name
-      vcpu      = module.rke2_worker.vcpu
-      memory_mb = module.rke2_worker.memory_mb
-      disk_gb   = module.rke2_worker.disk_gb
-    }
-  }
+  ]
 }
 
 output "ssh_connection_info" {
   description = "Cum să te conectezi"
   value = [
     "ssh ubuntu@${module.rke2_control_plane.ip_address}",
-    "ssh ubuntu@${module.rke2_worker.ip_address}"
+    "ssh ubuntu@${module.rke2_worker_01.ip_address}",
+    "ssh ubuntu@${module.rke2_worker_02.ip_address}"
   ]
 }

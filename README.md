@@ -22,10 +22,10 @@ AstroLumina-Terraform/
 
 ## Specificații VM
 
-| Node | vCPU | RAM | Disk | Rol |
-|------|-----|-----|------|-----|
-| rke2-cp-01 | 2 | 4 GB | 40 GB | Control Plane (server RKE2) |
-| rke2-worker-01 | 2 | 3 GB | 60 GB | Worker (agent RKE2) |
+| Node           | vCPU | RAM  | Disk  | Rol                         |
+| -------------- | ---- | ---- | ----- | --------------------------- |
+| rke2-cp-01     | 2    | 4 GB | 40 GB | Control Plane (server RKE2) |
+| rke2-worker-01 | 2    | 3 GB | 60 GB | Worker (agent RKE2)         |
 
 ## Cerințe Sistem (KVM/QEMU)
 
@@ -85,7 +85,6 @@ sudo virsh net-autostart default
 
 Aici se pun imaginile de bază (ubuntu.qcow2) și aici se creează disk-urile VM-urilor. Nu necesită configurare suplimentară.
 
-
 ## Configurare
 
 ### 1. Inițializare imagini de bază
@@ -97,6 +96,7 @@ Scriptul `tf.sh init` descarcă imaginea Ubuntu 22.04 Cloud Image și o converte
 ```
 
 Aceasta:
+
 - Descarcă `ubuntu-22.04-server-cloudimg-amd64.img` în `/var/lib/libvirt/images/`
 - Convertește în `ubuntu.qcow2` (formatul necesar pentru libvirt)
 - Setează permisiunile corecte
@@ -118,24 +118,24 @@ Rulează de două ori (a doua oară pentru a obține IP-urile DHCP).
 
 ## Comenzi Helper (tf.sh)
 
-| Comandă | Descriere |
-|---------|----------|
-| `./tf.sh init` | Descarcă imaginile de bază, configurează rețeaua și inițializează Terraform |
-| `./tf.sh apply` | Creează VM-urile cu IP-uri fixe (192.168.122.10, 192.168.122.11) |
-| `./tf.sh destroy` | Distruge toate VM-urile |
-| `./tf.sh start` | Pornește VM-urile |
-| `./tf.sh stop` | Oprește graceful VM-urile |
-| `./tf.sh force-stop` | Forțează oprirea VM-urilor |
-| `./tf.sh ips` | Afișează IP-urile DHCP și starea VM-urilor |
-| `./tf.sh status` | Afișează VM-urile care rulează |
+| Comandă              | Descriere                                                                   |
+| -------------------- | --------------------------------------------------------------------------- |
+| `./tf.sh init`       | Descarcă imaginile de bază, configurează rețeaua și inițializează Terraform |
+| `./tf.sh apply`      | Creează VM-urile cu IP-uri fixe (192.168.122.10, 192.168.122.11)            |
+| `./tf.sh destroy`    | Distruge toate VM-urile                                                     |
+| `./tf.sh start`      | Pornește VM-urile                                                           |
+| `./tf.sh stop`       | Oprește graceful VM-urile                                                   |
+| `./tf.sh force-stop` | Forțează oprirea VM-urilor                                                  |
+| `./tf.sh ips`        | Afișează IP-urile DHCP și starea VM-urilor                                  |
+| `./tf.sh status`     | Afișează VM-urile care rulează                                              |
 
 ## IP-uri Fixe (KVM/QEMU only)
 
 **Specific KVM/QEMU:** VM-urile primesc IP-uri fixe prin rezervări DHCP definite în `configs/network-default.xml`:
 
-| VM | MAC Address | IP Fix |
-|-----|------------|-------|
-| rke2-cp-01 | 52:54:00:a1:b2:c3 | 192.168.122.10 |
+| VM             | MAC Address       | IP Fix         |
+| -------------- | ----------------- | -------------- |
+| rke2-cp-01     | 52:54:00:a1:b2:c3 | 192.168.122.10 |
 | rke2-worker-01 | 52:54:00:d1:e2:f3 | 192.168.122.11 |
 
 Configurate în `configs/network-default.xml`:
@@ -172,11 +172,13 @@ ssh ubuntu@<IP_VM>
 ### VM nu pornește
 
 1. Verifică starea:
+
 ```bash
 virsh list --all
 ```
 
 2. Dacă sunt "shut off" deși `running = true`:
+
 ```bash
 sudo systemctl status apparmor
 sudo systemctl stop apparmor
@@ -184,6 +186,7 @@ sudo systemctl restart libvirtd
 ```
 
 3. Verifică log-urile:
+
 ```bash
 virsh console rke2-cp-01
 ```
