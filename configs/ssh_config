@@ -5,21 +5,15 @@ Host *
     PreferredAuthentications publickey
     PubkeyAuthentication yes
 
-Host rke2-cp-01
-    HostName 192.168.122.10
-    User ubuntu
-    IdentityFile ~/.ssh/id_ed25519
-
-Host rke2-worker-01
-    HostName 192.168.122.11
-    User ubuntu
-    IdentityFile ~/.ssh/id_ed25519
-
-Host rke2-worker-02
-    HostName 192.168.122.12
-    User ubuntu
-    IdentityFile ~/.ssh/id_ed25519
-
 Host 192.168.122.*
     User ubuntu
     IdentityFile ~/.ssh/id_ed25519
+
+Host rke2-cp-01
+    HostName 192.168.122.10
+
+Host rke2-worker-01
+    HostName 192.168.122.11
+
+Host rke2-worker-02
+    HostName 192.168.122.12
