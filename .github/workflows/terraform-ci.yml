@@ -1,0 +1,129 @@
+name: Terraform CI
+
+# All third-party actions are pinned to immutable commit SHAs
+# (instead of floating tags) to protect against supply-chain attacks.
+# The original version tag is kept as a trailing comment for readability.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "**/*.tf"
+      - ".github/workflows/terraform-ci.yml"
+      - ".tflint.hcl"
+      - "tf.sh"
+  pull_request:
+    paths:
+      - "**/*.tf"
+      - ".github/workflows/terraform-ci.yml"
+      - ".tflint.hcl"
+      - "tf.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: Terraform fmt (format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.9.*"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+
+  validate:
+    name: Validate (syntax & consistency)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.9.*"
+
+      - name: Terraform init (no backend — validation only)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+  tflint:
+    name: TFLint (best practices)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6e87008f9dd1fe3e34e66aca6c97b4a69f72a7f4 # v4
+        with:
+          tflint_version: latest
+
+      - name: Init TFLint plugins
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint --recursive --force --format compact
+
+  trivy:
+    name: Trivy (IaC security)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Run Trivy config scan
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        with:
+          scan-type: config
+          scan-ref: "."
+          format: sarif
+          output: trivy-results.sarif
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@87ef0dc97def48aa960fbf026a2563ee9dbdb470 # v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  shellcheck:
+    name: ShellCheck (tf.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: "."
+          severity: warning
+
+  gitleaks:
+    name: Gitleaks (exposed secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # NOTE: `terraform plan` is intentionally not run in CI — the libvirt
+  # provider requires local KVM/QEMU (see README + tf.sh), which is
+  # unavailable on GitHub-hosted runners. Syntax validation + TFLint +
+  # Trivy cover everything that can be checked statically.
