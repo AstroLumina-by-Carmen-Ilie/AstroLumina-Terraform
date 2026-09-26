@@ -37,10 +37,10 @@ locals {
 module "rke2_control_plane" {
   source = "./modules/kvm_vm"
 
-  vm_name       = "rke2-cp-01"
-  vcpu          = 2
-  memory_mb     = 4096
-  disk_gb       = 40
+  vm_name      = "rke2-cp-01"
+  vcpu         = 2
+  memory_mb    = 4096
+  disk_gb      = 40
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
   ssh_password = var.ssh_password
@@ -60,10 +60,10 @@ module "rke2_control_plane" {
 module "rke2_worker_01" {
   source = "./modules/kvm_vm"
 
-  vm_name       = "rke2-worker-01"
-  vcpu          = 2
-  memory_mb     = 3072
-  disk_gb       = 40
+  vm_name      = "rke2-worker-01"
+  vcpu         = 2
+  memory_mb    = 3072
+  disk_gb      = 40
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
   ssh_password = var.ssh_password
@@ -83,10 +83,10 @@ module "rke2_worker_01" {
 module "rke2_worker_02" {
   source = "./modules/kvm_vm"
 
-  vm_name       = "rke2-worker-02"
-  vcpu          = 2
-  memory_mb     = 3072
-  disk_gb       = 40
+  vm_name      = "rke2-worker-02"
+  vcpu         = 2
+  memory_mb    = 3072
+  disk_gb      = 40
   ssh_username = "ubuntu"
   ssh_pub_key  = var.ssh_pub_key
   ssh_password = var.ssh_password

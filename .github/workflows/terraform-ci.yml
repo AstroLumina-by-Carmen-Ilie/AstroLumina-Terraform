@@ -1,3 +1,4 @@
+---
 name: Terraform CI
 
 # All third-party actions are pinned to immutable commit SHAs
@@ -83,7 +84,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run Trivy config scan
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: "."
@@ -118,10 +119,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The gitleaks-action wrapper requires a paid license on organization
+      # repos, so the free OSS binary is installed directly instead.
+      - name: Install Gitleaks (OSS binary, pinned)
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gitleaks detect --source . --verbose --exit-code 1
 
   # NOTE: `terraform plan` is intentionally not run in CI — the libvirt
   # provider requires local KVM/QEMU (see README + tf.sh), which is
