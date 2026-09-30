@@ -181,9 +181,9 @@ case $1 in
         echo ""
         echo "Usage: $0 [command]"
         echo ""
-echo "Commands:"
-        echo "  init               - Download base images and initialize Terraform"
-        echo "  apply              - Create VMs with terraform apply (runs twice for IPs)"
+        echo "Commands:"
+        echo "  init              - Download base images and initialize Terraform"
+        echo "  apply             - Create VMs with terraform apply (runs twice for IPs)"
         echo "  destroy           - Destroy all VMs"
         echo "  start             - Start all VMs"
         echo "  stop              - Graceful shutdown all VMs"
@@ -194,10 +194,10 @@ echo "Commands:"
         echo ""
 
         echo "Examples:"
-        echo "  $0 init               # First time setup"
-        echo "  $0 apply              # Create VMs"
+        echo "  $0 init              # First time setup"
+        echo "  $0 apply             # Create VMs"
         echo "  $0 ips               # Get VM IPs"
-        echo "  $0 recreate-network # Recreate network with new DHCP reservations"
+        echo "  $0 recreate-network  # Recreate network with new DHCP reservations"
         return 1
         ;;
 esac

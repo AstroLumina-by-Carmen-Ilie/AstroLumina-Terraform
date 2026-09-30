@@ -167,6 +167,45 @@ ssh ubuntu@<IP_VM>
 # Parola: ubuntu
 ```
 
+## Repo Kubernetes partajat pe VM-uri (9p)
+
+Directorul `AstroLumina-Kubernetes` de pe host este partajat automat,
+read-only, în toate cele 3 VM-uri via 9p filesystem passthrough. După boot,
+pe orice VM găsești repo-ul la:
+
+```bash
+ls /mnt/k8s/development/
+kubectl apply -k /mnt/k8s/development/
+```
+
+Cum funcționează:
+
+- `main.tf` — variabila `k8s_repo_host_path` (`null` = repo-ul sibling
+  `../AstroLumina-Kubernetes`, șir gol = dezactivează partajarea). Se poate
+  suprascrie cu `-var='k8s_repo_host_path=/alt/calea'` sau `="..."` gol.
+- `modules/kvm_vm` — blocul `filesystems` din `libvirt_domain` (sursă
+  `mount.dir` pe host, tag `k8s_repo`, `passthrough`, `read_only`) +
+  intrarea `mounts` din cloud-init (`9p`, `trans=virtio,version=9p2000.L,ro`).
+- Tag-ul din `target.dir` trebuie să rămână identic cu cel din cloud-init,
+  altfel montarea eșuează la boot.
+
+Cerințe pe host (altfel VM-ul nu pornește sau mount-ul lipsește):
+
+1. qemu trebuie să poată citi calea. Cu AppArmor oprit (vezi secțiunea de
+   mai sus) plus `security_driver = "none"` în `/etc/libvirt/qemu.conf`
+   (doar pentru lab) nu e nevoie de nimic altceva. Cu setările implicite,
+   dă-i drepturi: `setfacl -R -m u:libvirt-qemu:rX <repo>` și `u:libvirt-qemu:--x`
+   pe fiecare director părinte până la `/`.
+2. Directorul trebuie să existe la `terraform apply`, altfel libvirt refuză
+   definirea domeniului.
+
+Verificare pe VM:
+
+```bash
+mount | grep /mnt/k8s   # 9p, ro
+touch /mnt/k8s/probe && echo PROBLEM || echo "read-only OK"
+```
+
 ## Troubleshooting
 
 ### VM nu pornește
