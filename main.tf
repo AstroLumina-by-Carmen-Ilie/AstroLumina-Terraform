@@ -29,8 +29,15 @@ variable "ssh_password" {
   default     = "ubuntu"
 }
 
+variable "k8s_repo_host_path" {
+  description = "Host path of AstroLumina-Kubernetes shared read-only into all VMs via 9p (null = sibling repo, empty disables sharing)"
+  type        = string
+  default     = null
+}
+
 locals {
   ubuntu_image_path = "/var/lib/libvirt/images/ubuntu-24.04.qcow2"
+  k8s_share_path    = var.k8s_repo_host_path != null ? var.k8s_repo_host_path : abspath("${path.module}/../AstroLumina-Kubernetes")
 }
 
 # ============================================================
@@ -45,6 +52,8 @@ module "rke2_control_plane" {
   ssh_pub_key  = var.ssh_pub_key
   ssh_password = var.ssh_password
   mac_address  = "52:54:00:a1:b2:c3"
+
+  host_share_path = local.k8s_share_path
 
   base_image_path = local.ubuntu_image_path
   network_name    = "default"
@@ -69,6 +78,8 @@ module "rke2_worker_01" {
   ssh_password = var.ssh_password
   mac_address  = "52:54:00:d1:e2:f3"
 
+  host_share_path = local.k8s_share_path
+
   base_image_path = local.ubuntu_image_path
   network_name    = "default"
   disk_pool       = "default"
@@ -91,6 +102,8 @@ module "rke2_worker_02" {
   ssh_pub_key  = var.ssh_pub_key
   ssh_password = var.ssh_password
   mac_address  = "52:54:00:aa:bb:cc"
+
+  host_share_path = local.k8s_share_path
 
   base_image_path = local.ubuntu_image_path
   network_name    = "default"

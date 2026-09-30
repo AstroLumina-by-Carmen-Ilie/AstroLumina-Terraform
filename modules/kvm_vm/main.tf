@@ -30,6 +30,12 @@ users:
 %{endif}
 
 ssh_pwauth: ${var.ssh_password != "" ? "true" : "false"}
+%{if var.host_share_path != ""}
+bootcmd:
+  - modprobe 9pnet_virtio
+mounts:
+  - ["${var.mount_tag}", "${var.guest_mountpoint}", "9p", "trans=virtio,version=9p2000.L,ro", "0", "0"]
+%{endif}
 
 packages:
   - openssh-server
@@ -161,6 +167,20 @@ resource "libvirt_domain" "this" {
         mac = var.mac_address != "" ? { address = var.mac_address } : null
       }
     ]
+
+    # Optional 9p share of a host directory (e.g. the Kubernetes manifests
+    # repo). The guest mount tag in target.dir must match the cloud-init
+    # mounts entry above. Empty list when sharing is disabled.
+    filesystems = var.host_share_path != "" ? [
+      {
+        source = {
+          mount = { dir = var.host_share_path }
+        }
+        target      = { dir = var.mount_tag }
+        access_mode = "passthrough"
+        read_only   = true
+      }
+    ] : []
 
     graphics = [
       {

@@ -72,3 +72,21 @@ variable "mac_address" {
   type        = string
   default     = ""
 }
+
+variable "host_share_path" {
+  description = "Host directory shared read-only into the VM via 9p (empty string disables sharing)"
+  type        = string
+  default     = ""
+}
+
+variable "guest_mountpoint" {
+  description = "Guest path where the shared directory is mounted"
+  type        = string
+  default     = "/mnt/k8s"
+}
+
+variable "mount_tag" {
+  description = "9p mount tag (must match the target dir and the cloud-init mounts entry)"
+  type        = string
+  default     = "k8s_repo"
+}
