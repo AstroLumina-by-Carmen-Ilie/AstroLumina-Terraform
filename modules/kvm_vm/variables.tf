@@ -90,3 +90,16 @@ variable "mount_tag" {
   type        = string
   default     = "k8s_repo"
 }
+
+variable "tailscale_auth_key" {
+  description = "Tailscale reusable auth key for automatic tailnet enrollment (empty string disables Tailscale setup)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "tailnet_dns_zone" {
+  description = "DNS zone served by dnsmasq on this VM, answered with the node's own Tailscale IP (empty string disables the split-DNS server; requires tailscale_auth_key)"
+  type        = string
+  default     = ""
+}

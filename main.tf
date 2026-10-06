@@ -35,6 +35,21 @@ variable "k8s_repo_host_path" {
   default     = null
 }
 
+variable "tailscale_auth_key" {
+  # Populated from the TF_VAR_tailscale_auth_key environment variable (reusable + ephemeral key from the Tailscale admin console)
+  description = "Tailscale reusable auth key for automatic tailnet enrollment (empty string disables Tailscale setup)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "tailscale_suffix" {
+  # Populated from the TF_VAR_tailscale_suffix environment variable (MagicDNS tailnet suffix, e.g. my-tailnet.ts.net)
+  description = "Tailscale MagicDNS suffix used to build stable VM hostnames (empty string disables MagicDNS outputs)"
+  type        = string
+  default     = ""
+}
+
 locals {
   ubuntu_image_path = "/var/lib/libvirt/images/ubuntu-24.04.qcow2"
   k8s_share_path    = var.k8s_repo_host_path != null ? var.k8s_repo_host_path : abspath("${path.module}/../AstroLumina-Kubernetes")
@@ -44,14 +59,15 @@ locals {
 module "rke2_control_plane" {
   source = "./modules/kvm_vm"
 
-  vm_name      = "rke2-cp-01"
-  vcpu         = 2
-  memory_mb    = 4096
-  disk_gb      = 40
-  ssh_username = "ubuntu"
-  ssh_pub_key  = var.ssh_pub_key
-  ssh_password = var.ssh_password
-  mac_address  = "52:54:00:a1:b2:c3"
+  vm_name            = "rke2-cp-01"
+  vcpu               = 2
+  memory_mb          = 4096
+  disk_gb            = 40
+  ssh_username       = "ubuntu"
+  ssh_pub_key        = var.ssh_pub_key
+  ssh_password       = var.ssh_password
+  tailscale_auth_key = var.tailscale_auth_key
+  mac_address        = "52:54:00:a1:b2:c3"
 
   host_share_path = local.k8s_share_path
 
@@ -69,14 +85,18 @@ module "rke2_control_plane" {
 module "rke2_worker_01" {
   source = "./modules/kvm_vm"
 
-  vm_name      = "rke2-worker-01"
-  vcpu         = 2
-  memory_mb    = 3072
-  disk_gb      = 40
-  ssh_username = "ubuntu"
-  ssh_pub_key  = var.ssh_pub_key
-  ssh_password = var.ssh_password
-  mac_address  = "52:54:00:d1:e2:f3"
+  vm_name            = "rke2-worker-01"
+  vcpu               = 2
+  memory_mb          = 3072
+  disk_gb            = 40
+  ssh_username       = "ubuntu"
+  ssh_pub_key        = var.ssh_pub_key
+  ssh_password       = var.ssh_password
+  tailscale_auth_key = var.tailscale_auth_key
+  mac_address        = "52:54:00:d1:e2:f3"
+
+  # This node answers *.k8s.astrolumina.ro with its own Tailscale IP (split DNS)
+  tailnet_dns_zone = "k8s.astrolumina.ro"
 
   host_share_path = local.k8s_share_path
 
@@ -94,14 +114,15 @@ module "rke2_worker_01" {
 module "rke2_worker_02" {
   source = "./modules/kvm_vm"
 
-  vm_name      = "rke2-worker-02"
-  vcpu         = 2
-  memory_mb    = 3072
-  disk_gb      = 40
-  ssh_username = "ubuntu"
-  ssh_pub_key  = var.ssh_pub_key
-  ssh_password = var.ssh_password
-  mac_address  = "52:54:00:aa:bb:cc"
+  vm_name            = "rke2-worker-02"
+  vcpu               = 2
+  memory_mb          = 3072
+  disk_gb            = 40
+  ssh_username       = "ubuntu"
+  ssh_pub_key        = var.ssh_pub_key
+  ssh_password       = var.ssh_password
+  tailscale_auth_key = var.tailscale_auth_key
+  mac_address        = "52:54:00:aa:bb:cc"
 
   host_share_path = local.k8s_share_path
 
@@ -162,4 +183,14 @@ output "ssh_connection_info" {
     "ssh ubuntu@${module.rke2_worker_01.ip_address}",
     "ssh ubuntu@${module.rke2_worker_02.ip_address}"
   ]
+}
+
+output "tailscale_hostnames" {
+  # Stable MagicDNS names (survive VM rebuilds as long as vm_name is unchanged); null when tailscale_suffix is not set
+  description = "Stable Tailscale MagicDNS hostnames for SSH access"
+  value = var.tailscale_suffix != "" ? {
+    control_plane = "${module.rke2_control_plane.vm_name}.${var.tailscale_suffix}"
+    worker_1      = "${module.rke2_worker_01.vm_name}.${var.tailscale_suffix}"
+    worker_2      = "${module.rke2_worker_02.vm_name}.${var.tailscale_suffix}"
+  } : null
 }
