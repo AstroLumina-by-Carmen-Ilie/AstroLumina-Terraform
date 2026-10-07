@@ -1,0 +1,11 @@
+# Gitleaks configuration for AstroLumina-Terraform.
+# The base rule set still applies; the single allowlist entry below covers
+# one proven false positive (no real secret value is committed in this repo).
+[allowlist]
+description = "Tailscale API token passed by environment reference only (see comment)"
+regexTarget = "line"
+regexes = [
+  # tf.sh only ever references ${TAILSCALE_API_TOKEN} (curl basic-auth user);
+  # the value comes from the OS environment at runtime and is never committed.
+  '''\$\{TAILSCALE_API_TOKEN\}:''',
+]

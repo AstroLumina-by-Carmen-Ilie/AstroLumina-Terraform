@@ -46,12 +46,55 @@ packages:
   - net-tools
   - jq
   - ca-certificates
+%{if var.tailscale_auth_key != "" && var.tailnet_dns_zone != ""}
+  - dnsmasq
+%{endif}
+
+%{if var.tailscale_auth_key != "" && var.tailnet_dns_zone != ""}
+# Split-DNS helper: serves <zone> -> this node's own Tailscale IP.
+# The IP is resolved at first boot (after 'tailscale up'), so VM rebuilds
+# that get a new tailnet IP keep working with no manual DNS edits.
+write_files:
+  - path: /etc/dnsmasq.d/tailnet-base.conf
+    permissions: '0644'
+    content: |
+      interface=tailscale0
+      bind-interfaces
+  - path: /usr/local/sbin/tailnet-dns-apply.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Wait for the node's Tailscale IPv4, then point the zone at it.
+      ZONE="$1"
+      TS_IP=""
+      for _ in $(seq 1 60); do
+        TS_IP=$(tailscale ip -4 2>/dev/null | head -n 1)
+        case "$TS_IP" in 100.*) break ;; *) TS_IP="" ;; esac
+        sleep 5
+      done
+      if [ -z "$TS_IP" ]; then
+        echo "tailnet-dns-apply: no Tailscale IPv4 yet, giving up" >&2
+        exit 1
+      fi
+      echo "address=/$${ZONE}/$${TS_IP}" > /etc/dnsmasq.d/tailnet-zone.conf
+      systemctl enable --now dnsmasq
+      systemctl restart dnsmasq
+%{endif}
 
 runcmd:
    - echo '${var.ssh_username}:${var.ssh_password}' | chpasswd
    - systemctl enable ssh
    - systemctl start ssh
    - apt update && apt upgrade -y
+%{if var.tailscale_auth_key != ""}
+   # Install Tailscale and join the tailnet with a stable hostname (survives VM rebuilds)
+   - curl -fsSL https://tailscale.com/install.sh | sh
+   - tailscale up --authkey='${var.tailscale_auth_key}' --hostname=${var.vm_name} --accept-dns
+%{endif}
+%{if var.tailscale_auth_key != "" && var.tailnet_dns_zone != ""}
+   # Point the split-DNS zone at this node's current Tailscale IP
+   - /usr/local/sbin/tailnet-dns-apply.sh ${var.tailnet_dns_zone}
+%{endif}
 EOF
 
   meta_data = yamlencode({
