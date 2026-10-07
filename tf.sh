@@ -203,6 +203,10 @@ TAILNET_DNS_ZONE="k8s.astrolumina.ro"
 # https://login.tailscale.com/admin/settings/keys, stored in .env, never committed)
 TAILSCALE_API_TOKEN="${TAILSCALE_API_TOKEN:-${tailscale_api_token:-}}"
 TAILSCALE_TAILNET="${TAILSCALE_TAILNET:--}"
+# Tailscale join credentials for Terraform (forwarded as TF_VAR_* in "apply").
+# Read from the OS environment at runtime, never committed.
+tailscale_auth_key="${tailscale_auth_key:-${TAILSCALE_AUTH_KEY:-}}"
+tailscale_suffix="${tailscale_suffix:-${TAILSCALE_SUFFIX:-}}"
 
 # Point the tailnet split-DNS zone at worker-01's current Tailscale IP.
 # Makes production.k8s.astrolumina.ro work from any tailnet device without

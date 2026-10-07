@@ -130,7 +130,9 @@ jobs:
           gitleaks version
 
       - name: Run Gitleaks
-        run: gitleaks detect --source . --verbose --exit-code 1
+        # .gitleaks.toml allowlists the ${TAILSCALE_API_TOKEN} env reference
+        # in tf.sh (declaration only, value comes from the OS environment).
+        run: gitleaks detect --source . --config .gitleaks.toml --verbose --exit-code 1
 
   # NOTE: `terraform plan` is intentionally not run in CI — the libvirt
   # provider requires local KVM/QEMU (see README + tf.sh), which is
