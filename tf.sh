@@ -8,9 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
 # VM names
-VM_CP="rke2-cp-01"
-VM_WORKER="rke2-worker-01"
-VM_WORKER2="rke2-worker-02"
+VM_CP01="rke2-cp-01"
+VM_WORKER01="rke2-worker-01"
+VM_WORKER02="rke2-worker-02"
 
 # ============================================================
 # Check for required packages
@@ -82,7 +82,7 @@ recreate_network() {
 # ============================================================
 start_vms() {
     echo "Starting VMs..."
-    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+    for vm in "$VM_CP01" "$VM_WORKER01" "$VM_WORKER02"; do
         sudo virsh start "$vm"
     done
     echo "VMs started"
@@ -93,12 +93,12 @@ start_vms() {
 # ============================================================
 stop_vms() {
     echo "Stopping VMs (graceful shutdown)..."
-    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+    for vm in "$VM_CP01" "$VM_WORKER01" "$VM_WORKER02"; do
         sudo virsh shutdown "$vm"
     done
     
     # Wait for shutdown
-    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+    for vm in "$VM_CP01" "$VM_WORKER01" "$VM_WORKER02"; do
         echo "Waiting for $vm to shutdown..."
         for _ in {1..60}; do
             if ! sudo virsh list | grep -q "$vm"; then
@@ -115,22 +115,38 @@ stop_vms() {
 # ============================================================
 force_stop_vms() {
     echo "Force stopping VMs..."
-    for vm in "$VM_CP" "$VM_WORKER" "$VM_WORKER2"; do
+    for vm in "$VM_CP01" "$VM_WORKER01" "$VM_WORKER02"; do
         sudo virsh destroy "$vm"
     done
     echo "VMs destroyed"
 }
 
-# VM network identities (must match configs/network-default.xml reservations)
-VM_CP_MAC="52:54:00:a1:b2:c3"
-VM_WORKER_MAC="52:54:00:d1:e2:f3"
-VM_WORKER2_MAC="52:54:00:aa:bb:cc"
-VM_CP_IP="192.168.122.10"
-VM_WORKER_IP="192.168.122.11"
-VM_WORKER2_IP="192.168.122.12"
+# VM network identities (must match configs/network-default.xml reservations).
+# The static IPs below are the addressing ground truth used by every command;
+# `virsh net-dhcp-leases` output is display-only (`ips` command) because its
+# table keeps stale entries that once pointed every MAC at .10.
+VM_CP01_MAC="52:54:00:a1:b2:c3"
+VM_WORKER01_MAC="52:54:00:d1:e2:f3"
+VM_WORKER02_MAC="52:54:00:aa:bb:cc"
+VM_CP01_IP="192.168.122.10"
+VM_WORKER01_IP="192.168.122.11"
+VM_WORKER02_IP="192.168.122.12"
 SSH_USER="ubuntu"
 WAIT_INTERVAL=10
 WAIT_TIMEOUT_DEFAULT=600
+
+# Node inventory (single source of truth for tailscale_start):
+# name:mac:static-ip:family:id:expected-hostname. MACs pin the DHCP
+# reservations in network-default.xml, IPs are the addressing ground truth,
+# family is the role stem, id is the short role label used in log lines (CP01
+# for the control plane, WORKER01/WORKER02 for the workers), and
+# expected-hostname is the EXACT OS hostname that IP must report (verified
+# live over SSH) -- an alien or swapped host fails the node.
+NODES=(
+    "${VM_CP01}:${VM_CP01_MAC}:${VM_CP01_IP}:rke2-cp:CP01:rke2-cp-daniel-pirvu-01"
+    "${VM_WORKER01}:${VM_WORKER01_MAC}:${VM_WORKER01_IP}:rke2-worker:WORKER01:rke2-worker-daniel-pirvu-01"
+    "${VM_WORKER02}:${VM_WORKER02_MAC}:${VM_WORKER02_IP}:rke2-worker:WORKER02:rke2-worker-daniel-pirvu-02"
+)
 
 # ============================================================
 # Get IPs from DHCP leases
@@ -143,23 +159,168 @@ get_ips() {
     sudo virsh list --all
 }
 
-# Resolve current IP for a MAC from DHCP leases, fallback to static reservation
-vm_ip() {
-    local mac="$1"
-    local fallback="$2"
-    local leased
-    leased=$(sudo virsh net-dhcp-leases default 2>/dev/null | grep -i "$mac" | grep -oE '192\.168\.122\.[0-9]+' | head -1)
-    if [[ -n "$leased" ]]; then
-        echo "$leased"
-    else
-        echo "$fallback"
-    fi
-}
-
 ssh_vm() {
     local ip="$1"
     shift
     ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${SSH_USER}@${ip}" "$@"
+}
+
+# Wait for SSH on a single VM (no cloud-init/tailscale checks -- used by
+# "start", where the disk already holds a finished cloud-init run from the
+# initial build and only a fresh boot needs waiting out).
+wait_ssh() {
+    local name="$1"
+    local ip="$2"
+    local deadline="$3"
+    local now
+
+    echo "==> ${name} (${ip}): waiting for SSH..."
+    while true; do
+        now=$(date +%s)
+        if (( now >= deadline )); then
+            echo "TIMEOUT: ${name}: SSH never came up."
+            return 1
+        fi
+        if ssh_vm "$ip" "true" 2>/dev/null; then
+            echo "OK: ${name} SSH reachable"
+            return 0
+        fi
+        echo "    ... SSH unavailable, retrying in ${WAIT_INTERVAL}s"
+        sleep "$WAIT_INTERVAL"
+    done
+}
+
+# Bring Tailscale up on all nodes after a plain start. Nodes are addressed by
+# their STATIC reservation IPs (.10/.11/.12, matching
+# configs/network-default.xml) -- never by `virsh net-dhcp-leases`. The lease
+# table keeps stale entries across rebuilds (all three MACs once resolved to
+# .10) and picking the first match silently lands every SSH session on the
+# same box, with output that looks healthy per node. Identity is verified in
+# two steps. First, each reached hostname must EXACTLY equal the expected OS
+# hostname from the inventory above -- no family/prefix leniency, so a
+# swapped or renamed host fails loudly instead of receiving commands meant
+# for another node (a fresh rebuild reporting a short name like rke2-cp-01
+# will fail here until the inventory is updated to match it).
+# node. Second, all three hostnames must be pairwise distinct, which exposes
+# a duplicate-IP situation no matter the naming scheme (it cannot tell the
+# two workers apart if .11/.12 were swapped -- same family -- so the reached
+# hostname is always printed for eyeball verification).
+# Tailscale itself: nodes that already hold a 100.x address are skipped; the
+# rest are re-authenticated non-interactively with the SAME reusable auth key
+# cloud-init used (TAILSCALE_AUTH_KEY, already on this laptop). The re-run
+# MUST repeat --hostname and --accept-dns, because the original join used
+# those non-default flags and `tailscale up` refuses to proceed without
+# re-mentioning every non-default setting (the short VM name matches the
+# stored Tailscale device name, not the suffixed OS hostname). stdin is
+# closed on the re-auth call so a login prompt can never hang the script --
+# it fails loudly instead.
+# Usage: tailscale_start [timeout_seconds]
+tailscale_start() {
+    local timeout="${1:-$WAIT_TIMEOUT_DEFAULT}"
+    local deadline failed=0
+    deadline=$(( $(date +%s) + timeout ))
+    local names=() ips=() families=() ids=() expected=() hostnames=("" "" "")
+    local spec rest
+    # Parsed right-to-left: the MAC itself contains colons, so naive
+    # left-splitting would slice inside it. Expected, id, family and IP
+    # never do; the name is whatever remains before the first colon.
+    for spec in "${NODES[@]}"; do
+        expected+=("${spec##*:}")
+        rest="${spec%:*}"
+        ids+=("${rest##*:}")
+        rest="${rest%:*}"
+        families+=("${rest##*:}")
+        rest="${rest%:*}"
+        ips+=("${rest##*:}")
+        rest="${rest%:*}"
+        names+=("${rest%%:*}")
+    done
+    local i j name ip remote_name ts_ip
+
+    echo "Bringing Tailscale up on all VMs (timeout ${timeout}s)..."
+
+    # Phase 1: SSH reachability + identity only, no state changes.
+    for i in 0 1 2; do
+        name="${names[$i]}"
+        ip="${ips[$i]}"
+        id="${ids[$i]}"
+        wait_ssh "${id}" "$ip" "$deadline" || { failed=1; continue; }
+        remote_name=$(ssh_vm "$ip" "hostname" 2>/dev/null | tr -d '\r\n ' || true)
+        if [[ -z "$remote_name" ]]; then
+            echo "FAILED: ${id} (${ip}): SSH answers but hostname is unreadable."
+            failed=1
+            continue
+        fi
+        echo "OK: ${id} (${ip}): reached host '${remote_name}'"
+        if [[ "$remote_name" != "${expected[$i]}" ]]; then
+            echo "FAILED: ${id} (${ip}): host '${remote_name}' is not '${expected[$i]}' -- wrong box, swapped IP or renamed host, refusing to touch it."
+            failed=1
+            continue
+        fi
+        hostnames[$i]="$remote_name"
+    done
+
+    # Pairwise distinctness: two nodes answering with the same hostname means
+    # one address (or both) reaches the same box -- duplicate IP or stale
+    # lease. Both are disqualified so no command ever runs on the wrong node.
+    for i in 0 1 2; do
+        for j in 0 1 2; do
+            if (( j > i )) && [[ -n "${hostnames[$i]}" && "${hostnames[$i]}" == "${hostnames[$j]}" ]]; then
+                echo "FAILED: ${ids[$i]} (${ips[$i]}) and ${ids[$j]} (${ips[$j]}) both reach '${hostnames[$i]}' -- duplicate IP or stale DHCP lease. Refusing to touch either."
+                failed=1
+                hostnames[$i]=""
+                hostnames[$j]=""
+            fi
+        done
+    done
+
+    # Phase 2: Tailscale on verified nodes only (log lines use the short
+    # role id; the --hostname flag below intentionally keeps the SHORT vm
+    # name, which matches the stored Tailscale device name from the
+    # original cloud-init join, not the suffixed OS hostname).
+    for i in 0 1 2; do
+        [[ -n "${hostnames[$i]}" ]] || continue
+        name="${names[$i]}"
+        id="${ids[$i]}"
+        ip="${ips[$i]}"
+
+        ts_ip=$(ssh_vm "$ip" "tailscale ip -4 2>/dev/null" | head -1 || true)
+        if echo "$ts_ip" | grep -qE '^100\.'; then
+            echo "OK: ${id} tailscale already up (${ts_ip}), skipping re-auth"
+            continue
+        fi
+
+        if [[ -z "${tailscale_auth_key:-}" ]]; then
+            echo "FAILED: ${id}: Tailscale session is down and no auth key is set. Export TAILSCALE_AUTH_KEY (the existing reusable key) and re-run."
+            failed=1
+            continue
+        fi
+
+        echo "==> ${id}: re-authenticating tailscale (non-interactive)..."
+        if ! ssh_vm "$ip" "sudo systemctl enable --now tailscaled >/dev/null 2>&1"; then
+            echo "FAILED: ${id}: could not enable/start tailscaled."
+            failed=1
+            continue
+        fi
+        if ! ssh_vm "$ip" "sudo tailscale up --authkey='${tailscale_auth_key}' --hostname=${name} --accept-dns" < /dev/null; then
+            echo "FAILED: ${id}: non-interactive 'tailscale up' failed (key may be expired -- generate a new reusable one)."
+            failed=1
+            continue
+        fi
+        ts_ip=$(ssh_vm "$ip" "tailscale ip -4 2>/dev/null" | head -1 || true)
+        if echo "$ts_ip" | grep -qE '^100\.'; then
+            echo "OK: ${id} tailscale up (${ts_ip})"
+        else
+            echo "FAILED: ${id}: no 100.x address after re-auth (got '${ts_ip:-none}')."
+            failed=1
+        fi
+    done
+
+    if (( failed != 0 )); then
+        echo "DONE with errors: Tailscale is not up on every VM."
+        return 1
+    fi
+    echo "Tailscale is up on all VMs."
 }
 
 # Wait for a single VM: cloud-init done + tailscale up (100.x IP). Returns 0 on success.
@@ -215,7 +376,9 @@ tailscale_suffix="${tailscale_suffix:-${TAILSCALE_SUFFIX:-}}"
 dns_sync() {
     local lan_ip ts_ip current merged
 
-    lan_ip=$(vm_ip "$VM_WORKER_MAC" "$VM_WORKER_IP")
+    # Static reservation IP: the addressing ground truth (DHCP leases may be
+    # stale -- see tailscale_start header).
+    lan_ip="$VM_WORKER01_IP"
     ts_ip=$(ssh_vm "$lan_ip" "tailscale ip -4 2>/dev/null" | head -1)
     if ! echo "$ts_ip" | grep -qE '^100\.'; then
         echo "dns-sync: worker-01 has no Tailscale IP yet (got '${ts_ip:-none}'). Run '$0 wait' first."
@@ -274,13 +437,11 @@ wait_all_vms() {
     deadline=$(( $(date +%s) + timeout ))
 
     echo "Waiting for cloud-init + tailscale on all VMs (timeout ${timeout}s)..."
-    local ip
-    ip=$(vm_ip "$VM_CP_MAC" "$VM_CP_IP")
-    wait_one_vm "$VM_CP" "$ip" "$deadline" || failed=1
-    ip=$(vm_ip "$VM_WORKER_MAC" "$VM_WORKER_IP")
-    wait_one_vm "$VM_WORKER" "$ip" "$deadline" || failed=1
-    ip=$(vm_ip "$VM_WORKER2_MAC" "$VM_WORKER2_IP")
-    wait_one_vm "$VM_WORKER2" "$ip" "$deadline" || failed=1
+    # Static reservation IPs: the addressing ground truth (see tailscale_start
+    # header for why DHCP leases are not trusted here).
+    wait_one_vm "$VM_CP01" "$VM_CP01_IP" "$deadline" || failed=1
+    wait_one_vm "$VM_WORKER01" "$VM_WORKER01_IP" "$deadline" || failed=1
+    wait_one_vm "$VM_WORKER02" "$VM_WORKER02_IP" "$deadline" || failed=1
 
     if (( failed != 0 )); then
         echo "DONE with errors: one or more VMs are not ready. Check with: $0 ips"
@@ -324,6 +485,10 @@ case $1 in
         ;;
     "start")
         start_vms
+        # Fresh boot: wait for SSH on each node (static reservation IPs),
+        # verify which host answers, then reconnect Tailscale where the
+        # session is down (non-interactive re-auth with the reusable key).
+        tailscale_start "${2:-$WAIT_TIMEOUT_DEFAULT}" || exit 1
         ;;
     "stop")
         stop_vms
@@ -355,7 +520,7 @@ case $1 in
         echo "  init              - Download base images and initialize Terraform"
         echo "  apply             - Create VMs with terraform apply (runs twice for IPs)"
         echo "  destroy           - Destroy all VMs"
-        echo "  start             - Start all VMs"
+        echo "  start [timeout]   - Start all VMs, wait for SSH, then bring Tailscale up on each node (default 600s)"
         echo "  stop              - Graceful shutdown all VMs"
         echo "  force-stop        - Force stop (destroy) all VMs"
         echo "  ips               - Show DHCP leases and VM status"
